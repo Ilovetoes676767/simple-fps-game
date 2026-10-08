@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Obby Combat Game</title>
+    <style>
+        body {
+            margin: 0;
+            background: #111;
+            color: white;
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+        }
+
+        #lobby {
+            width: 420px;
+            margin: 20px auto;
+            padding: 22px;
+            border: 2px solid #fff;
+            text-align: center;
+            background: rgba(255,255,255,0.05);
+            border-radius: 10px;
+            display: block;
+        }
+
+        #lobby.hidden {
+            display: none;
+        }
+
+        button {
+            width: 210px;
+            margin: 10px;
+            padding: 12px;
+            border: none;
+            border-radius: 8px;
+            background: #555;
+            color: white;
+            font-size: 16px;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background: #777;
+        }
+
+        #game-container {
+            width: 800px;
+            height: 600px;
+            margin: 20px auto;
+            border: 2px solid #fff;
+            background: #222;
+            border-radius: 8px;
+            overflow: hidden;
+            display: none;
+            position: relative;
+        }
+
+        #game-container.active {
+            display: block;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            background: #1a1a1a;
+        }
+
+        #hud {
+            position: absolute;
+            top: 18px;
+            left: 18px;
+            z-index: 10;
+            padding: 8px 10px;
+            background: rgba(0,0,0,0.35);
+            border-radius: 8px;
+            font-size: 18px;
+        }
+
+        .controls {
+            position: absolute;
+            bottom: 14px;
+            left: 18px;
+            z-index: 10;
+            background: rgba(0,0,0,0.35);
+            border-radius: 8px;
+            padding: 6px 10px;
+            font-size: 14px;
+            color: #ddd;
+        }
+    </style>
+</head>
+<body>
+    <div id="lobby">
+        <h1>Obby Combat</h1>
+        <p>Use WASD to move, left click to shoot, and right click to punch your way through the obstacle course.</p>
+        <button onclick="startGame()">Start Game</button>
+    </div>
+
+    <div id="game-container">
+        <canvas id="gameCanvas" width="800" height="600"></canvas>
+        <div id="hud">
+            <div>Health: <span id="health">100</span>/100</div>
+            <div>Stage: <span id="stage">1</span></div>
+            <div>Enemies: <span id="enemies">0</span></div>
+        </div>
+        <div class="controls">
+            WASD = move | Left click = shoot | Right click = punch
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const keys = {};
+        let gameActive = false;
+
+        function startGame() {
+            document.getElementById('lobby').classList.add('hidden');
+            document.getElementById('game-container').classList.add('active');
+            gameActive = true;
+            initGame();
+        }
+
+        function initGame() {
+            const player = {
+                x: 40,
+                y: 100,
+                width: 22,
+                height: 30,
+                speed: 3.5,
+                health: 100,
+                maxHealth: 100,
+                color: '#00ff88'
+            };
+
+            const bullets = [];
+            const enemies = [];
+            const obstacles = [];
+            const finish = { x: 730, y: 520, width: 50, height: 50, color: '#ffd700' };
+            let stage = 1;
+            let score = 0;
+            let lastTime = 0;
+            let shootCooldown = 0;
+            let punchCooldown = 0;
+            let animationId = null;
+
+            function rectCollide(a, b) {
+                return a.x < b.x + b.width &&
+                       a.x + a.width > b.x &&
+                       a.y < b.y + b.height &&
+                       a.y + a.height > b.y;
+            }
+
+            function buildObstacles() {
+                obstacles.length = 0;
+
+                // ground
+                obstacles.push({ x: 0, y: 580, width: 800, height: 20, color: '#666' });
+
+                // stage platforms
+                const platforms = [
+                    { x: 120, y: 520, width: 150, height: 18 },
+                    { x: 340, y: 470, width: 150, height: 18 },
+                    { x: 560, y: 420, width: 120, height: 18 },
+                    { x: 680, y: 350, width: 80, height: 18 },
+                    { x: 500, y: 290, width: 140, height: 18 },
+                    { x: 290, y: 240, width: 120, height: 18 },
+                    { x: 120, y: 180, width: 140, height: 18 }
+                ];
+
+                for (const p of platforms) {
+                    obstacles.push({ ...p, color: '#8a8a8a' });
+                }
+
+                // walls and blocks
+                obstacles.push({ x: 250, y: 470, width: 20, height: 110, color: '#444' });
+                obstacles.push({ x: 470, y: 380, width: 20, height: 95, color: '#444' });
+                obstacles.push({ x: 660, y: 300, width: 20, height: 80, color: '#444' });
+            }
+
+            function spawnEnemies() {
+                enemies.length = 0;
+                const enemyCount = 2 + stage;
+                for (let i = 0; i < enemyCount; i++) {
+                    enemies.push({
+                        x: 120 + i * 140,
+                        y: 520 - (i % 2) * 30,
+                        width: 18,
+                        height: 28,
+                        health: 50 + stage * 20,
+                        maxHealth: 50 + stage * 20,
+                        speed: 1 + stage * 0.4,
+                        dir: 1,
+                        color: '#ff5c5c'
+                    });
+                }
+            }
+
+            function shoot() {
+                if (shootCooldown > 0) return;
+                bullets.push({
+                    x: player.x + player.width,
+                    y: player.y + player.height / 2 - 2,
+                    width: 10,
+                    height: 4,
+                    vx: 8,
+                    color: '#ffe066'
+                });
+                shootCooldown = 10;
+            }
+
+            function punch() {
+                if (punchCooldown > 0) return;
+                const hitbox = {
+                    x: player.x + player.width,
+                    y: player.y,
+                    width: 28,
+                    height: player.height
+                };
+
+                let hit = false;
+                for (let i = enemies.length - 1; i >= 0; i--) {
+                    if (rectCollide(hitbox, enemies[i])) {
+                        enemies[i].health -= 35;
+                        hit = true;
+                        if (enemies[i].health <= 0) {
+                            enemies.splice(i, 1);
+                            score += 100;
+                        }
+                    }
+                }
+
+                if (hit) score += 10;
+                punchCooldown = 25;
+            }
+
+            function update(dt) {
+                shootCooldown = Math.max(0, shootCooldown - dt);
+                punchCooldown = Math.max(0, punchCooldown - dt);
+
+                // movement
+                let moveX = 0;
+                let moveY = 0;
+
+                if (keys['w'] || keys['arrowup']) moveY -= player.speed;
+                if (keys['s'] || keys['arrowdown']) moveY += player.speed;
+                if (keys['a'] || keys['arrowleft']) moveX -= player.speed;
+                if (keys['d'] || keys['arrowright']) moveX += player.speed;
+
+                player.x += moveX * dt;
+                player.y += moveY * dt;
+
+                // keep player in bounds
+                player.x = Math.max(0, Math.min(canvas.width - player.width, player.x));
+                player.y = Math.max(0, Math.min(canvas.height - player.height, player.y));
+
+                // obstacle collisions
+                for (const obs of obstacles) {
+                    if (rectCollide(player, obs)) {
+                        if (moveY > 0) player.y = obs.y - player.height;
+                        if (moveY < 0) player.y = obs.y + obs.height;
+                        if (moveX > 0) player.x = obs.x - player.width;
+                        if (moveX < 0) player.x = obs.x + obs.width;
+                    }
+                }
+
+                // bullets
+                for (let i = bullets.length - 1; i >= 0; i--) {
+                    bullets[i].x += bullets[i].vx * dt;
+
+                    if (bullets[i].x > canvas.width) {
+                        bullets.splice(i, 1);
+                        continue;
+                    }
+
+                    for (let j = enemies.length - 1; j >= 0; j--) {
+                        if (rectCollide(bullets[i], enemies[j])) {
+                            enemies[j].health -= 25;
+                            bullets.splice(i, 1);
+                            if (enemies[j].health <= 0) {
+                                enemies.splice(j, 1);
+                                score += 100;
+                            }
+                            break;
+                        }
+                    }
+                }
+
+                // enemy AI
+                for (const enemy of enemies) {
+                    const towardPlayer = player.x < enemy.x ? -1 : 1;
+                    enemy.x += towardPlayer * enemy.speed * dt;
+
+                    if (rectCollide(player, enemy)) {
+                        player.health -= 0.1 * dt * 30;
+                    }
+                }
+
+                // reset if dead
+                if (player.health <= 0) {
+                    gameActive = false;
+                    alert('Game Over! Final Score: ' + score);
+                    document.getElementById('lobby').classList.remove('hidden');
+                    document.getElementById('game-container').classList.remove('active');
+                    return;
+                }
+
+                // finish check
+                if (rectCollide(player, finish)) {
+                    stage += 1;
+                    score += 300;
+                    spawnEnemies();
+                    player.x = 30;
+                    player.y = 100;
+                }
+
+                document.getElementById('health').textContent = Math.ceil(player.health);
+                document.getElementById('stage').textContent = stage;
+                document.getElementById('enemies').textContent = enemies.length;
+            }
+
+            function draw() {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = '#151515';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                // draw sky blocks / platforms
+                for (const obs of obstacles) {
+                    ctx.fillStyle = obs.color;
+                    ctx.fillRect(obs.x, obs.y, obs.width, obs.height);
+                }
+
+                // finish flag
+                ctx.fillStyle = finish.color;
+                ctx.fillRect(finish.x, finish.y, finish.width, finish.height);
+
+                // player
+                ctx.fillStyle = player.color;
+                ctx.fillRect(player.x, player.y, player.width, player.height);
+
+                // bullets
+                for (const bullet of bullets) {
+                    ctx.fillStyle = bullet.color;
+                    ctx.fillRect(bullet.x, bullet.y, bullet.width, bullet.height);
+                }
+
+                // enemies
+                for (const enemy of enemies) {
+                    ctx.fillStyle = enemy.color;
+                    ctx.fillRect(enemy.x, enemy.y, enemy.width, enemy.height);
+
+                    ctx.fillStyle = '#ff0000';
+                    ctx.fillRect(enemy.x, enemy.y - 8, enemy.width, 4);
+                    ctx.fillStyle = '#00ff00';
+                    ctx.fillRect(enemy.x, enemy.y - 8, (enemy.health / enemy.maxHealth) * enemy.width, 4);
+                }
+
+                // health bar
+                ctx.fillStyle = '#ff0000';
+                ctx.fillRect(10, 20, 100, 12);
+                ctx.fillStyle = '#00ff00';
+                ctx.fillRect(10, 20, (player.health / player.maxHealth) * 100, 12);
+            }
+
+            function gameLoop(ts) {
+                if (!gameActive) return;
+                const dt = (ts - (lastTime || ts)) / 16.666;
+                lastTime = ts;
+                update(dt);
+                draw();
+                animationId = requestAnimationFrame(gameLoop);
+            }
+
+            window.addEventListener('keydown', (e) => {
+                keys[e.key.toLowerCase()] = true;
+            });
+
+            window.addEventListener('keyup', (e) => {
+                keys[e.key.toLowerCase()] = false;
+            });
+
+            canvas.addEventListener('mousedown', (e) => {
+                if (!gameActive) return;
+                if (e.button === 0) shoot();
+                if (e.button === 2) punch();
+            });
+
+            document.addEventListener('contextmenu', (e) => e.preventDefault());
+
+            buildObstacles();
+            spawnEnemies();
+            requestAnimationFrame(gameLoop);
+        }
+    </script>
+</body>
+</html>
