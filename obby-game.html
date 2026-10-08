@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Obby Combat Game</title>
+    <title>Obby Combat Game - Advanced</title>
     <style>
         body {
             margin: 0;
@@ -47,8 +47,8 @@
         }
 
         #game-container {
-            width: 800px;
-            height: 600px;
+            width: 1000px;
+            height: 650px;
             margin: 20px auto;
             border: 2px solid #fff;
             background: #222;
@@ -56,6 +56,7 @@
             overflow: hidden;
             display: none;
             position: relative;
+            cursor: crosshair;
         }
 
         #game-container.active {
@@ -75,9 +76,10 @@
             left: 18px;
             z-index: 10;
             padding: 8px 10px;
-            background: rgba(0,0,0,0.35);
+            background: rgba(0,0,0,0.5);
             border-radius: 8px;
-            font-size: 18px;
+            font-size: 16px;
+            font-family: monospace;
         }
 
         .controls {
@@ -85,30 +87,31 @@
             bottom: 14px;
             left: 18px;
             z-index: 10;
-            background: rgba(0,0,0,0.35);
+            background: rgba(0,0,0,0.5);
             border-radius: 8px;
             padding: 6px 10px;
-            font-size: 14px;
+            font-size: 13px;
             color: #ddd;
         }
     </style>
 </head>
 <body>
     <div id="lobby">
-        <h1>Obby Combat</h1>
-        <p>Use WASD to move, left click to shoot, and right click to punch your way through the obstacle course.</p>
+        <h1>Obby Combat - Advanced</h1>
+        <p>Use WASD to move, aim with your mouse, left click to shoot, and right click to punch your way through the obstacle course.</p>
         <button onclick="startGame()">Start Game</button>
     </div>
 
     <div id="game-container">
-        <canvas id="gameCanvas" width="800" height="600"></canvas>
+        <canvas id="gameCanvas" width="1000" height="650"></canvas>
         <div id="hud">
-            <div>Health: <span id="health">100</span>/100</div>
-            <div>Stage: <span id="stage">1</span></div>
-            <div>Enemies: <span id="enemies">0</span></div>
+            <div>❤ Health: <span id="health">100</span>/100</div>
+            <div>🎯 Ammo: <span id="ammo">30</span></div>
+            <div>📍 Stage: <span id="stage">1</span></div>
+            <div>👾 Enemies: <span id="enemies">0</span></div>
         </div>
         <div class="controls">
-            WASD = move | Left click = shoot | Right click = punch
+            WASD = move | Mouse = aim | Left click = shoot | Right click = punch | R = reload
         </div>
     </div>
 
@@ -117,6 +120,8 @@
         const ctx = canvas.getContext('2d');
         const keys = {};
         let gameActive = false;
+        let mouseX = canvas.width / 2;
+        let mouseY = canvas.height / 2;
 
         function startGame() {
             document.getElementById('lobby').classList.add('hidden');
@@ -125,28 +130,81 @@
             initGame();
         }
 
+        function drawStickFigure(x, y, color, angle = 0) {
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.rotate(angle);
+
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 2;
+            ctx.fillStyle = color;
+
+            // head
+            ctx.beginPath();
+            ctx.arc(0, -15, 6, 0, Math.PI * 2);
+            ctx.fill();
+
+            // body
+            ctx.beginPath();
+            ctx.moveTo(0, -9);
+            ctx.lineTo(0, 5);
+            ctx.stroke();
+
+            // left arm
+            ctx.beginPath();
+            ctx.moveTo(0, -5);
+            ctx.lineTo(-10, 2);
+            ctx.stroke();
+
+            // right arm
+            ctx.beginPath();
+            ctx.moveTo(0, -5);
+            ctx.lineTo(10, 2);
+            ctx.stroke();
+
+            // left leg
+            ctx.beginPath();
+            ctx.moveTo(0, 5);
+            ctx.lineTo(-6, 18);
+            ctx.stroke();
+
+            // right leg
+            ctx.beginPath();
+            ctx.moveTo(0, 5);
+            ctx.lineTo(6, 18);
+            ctx.stroke();
+
+            ctx.restore();
+        }
+
         function initGame() {
             const player = {
-                x: 40,
-                y: 100,
-                width: 22,
-                height: 30,
+                x: 50,
+                y: 400,
+                width: 14,
+                height: 25,
                 speed: 3.5,
                 health: 100,
                 maxHealth: 100,
-                color: '#00ff88'
+                ammo: 30,
+                maxAmmo: 30,
+                color: '#00ff88',
+                vx: 0,
+                vy: 0,
+                isJumping: false
             };
 
             const bullets = [];
             const enemies = [];
             const obstacles = [];
-            const finish = { x: 730, y: 520, width: 50, height: 50, color: '#ffd700' };
+            const finish = { x: 930, y: 570, width: 50, height: 50, color: '#ffd700' };
             let stage = 1;
             let score = 0;
             let lastTime = 0;
             let shootCooldown = 0;
             let punchCooldown = 0;
             let animationId = null;
+            let muzzleFlash = 0;
 
             function rectCollide(a, b) {
                 return a.x < b.x + b.width &&
@@ -159,17 +217,17 @@
                 obstacles.length = 0;
 
                 // ground
-                obstacles.push({ x: 0, y: 580, width: 800, height: 20, color: '#666' });
+                obstacles.push({ x: 0, y: 620, width: 1000, height: 30, color: '#666' });
 
                 // stage platforms
                 const platforms = [
-                    { x: 120, y: 520, width: 150, height: 18 },
-                    { x: 340, y: 470, width: 150, height: 18 },
-                    { x: 560, y: 420, width: 120, height: 18 },
-                    { x: 680, y: 350, width: 80, height: 18 },
-                    { x: 500, y: 290, width: 140, height: 18 },
-                    { x: 290, y: 240, width: 120, height: 18 },
-                    { x: 120, y: 180, width: 140, height: 18 }
+                    { x: 80, y: 560, width: 160, height: 20 },
+                    { x: 300, y: 510, width: 160, height: 20 },
+                    { x: 520, y: 460, width: 140, height: 20 },
+                    { x: 720, y: 400, width: 120, height: 20 },
+                    { x: 550, y: 340, width: 160, height: 20 },
+                    { x: 320, y: 280, width: 140, height: 20 },
+                    { x: 100, y: 220, width: 160, height: 20 }
                 ];
 
                 for (const p of platforms) {
@@ -177,9 +235,9 @@
                 }
 
                 // walls and blocks
-                obstacles.push({ x: 250, y: 470, width: 20, height: 110, color: '#444' });
-                obstacles.push({ x: 470, y: 380, width: 20, height: 95, color: '#444' });
-                obstacles.push({ x: 660, y: 300, width: 20, height: 80, color: '#444' });
+                obstacles.push({ x: 200, y: 510, width: 25, height: 110, color: '#555' });
+                obstacles.push({ x: 450, y: 420, width: 25, height: 100, color: '#555' });
+                obstacles.push({ x: 700, y: 350, width: 25, height: 90, color: '#555' });
             }
 
             function spawnEnemies() {
@@ -187,99 +245,137 @@
                 const enemyCount = 2 + stage;
                 for (let i = 0; i < enemyCount; i++) {
                     enemies.push({
-                        x: 120 + i * 140,
-                        y: 520 - (i % 2) * 30,
-                        width: 18,
-                        height: 28,
+                        x: 150 + i * 180,
+                        y: 560 - (i % 2) * 40,
+                        width: 14,
+                        height: 25,
                         health: 50 + stage * 20,
                         maxHealth: 50 + stage * 20,
-                        speed: 1 + stage * 0.4,
+                        speed: 0.8 + stage * 0.3,
                         dir: 1,
-                        color: '#ff5c5c'
+                        color: '#ff5c5c',
+                        vx: 0,
+                        vy: 0,
+                        isJumping: false
                     });
                 }
             }
 
             function shoot() {
-                if (shootCooldown > 0) return;
+                if (shootCooldown > 0 || player.ammo <= 0) return;
+                
+                const angle = Math.atan2(mouseY - player.y, mouseX - player.x);
                 bullets.push({
-                    x: player.x + player.width,
-                    y: player.y + player.height / 2 - 2,
-                    width: 10,
+                    x: player.x + 7,
+                    y: player.y + 5,
+                    width: 12,
                     height: 4,
-                    vx: 8,
-                    color: '#ffe066'
+                    vx: Math.cos(angle) * 9,
+                    vy: Math.sin(angle) * 9,
+                    color: '#ffff00',
+                    damage: 30
                 });
-                shootCooldown = 10;
+                
+                player.ammo--;
+                shootCooldown = 8;
+                muzzleFlash = 3;
+            }
+
+            function reload() {
+                player.ammo = player.maxAmmo;
             }
 
             function punch() {
                 if (punchCooldown > 0) return;
+                const angle = Math.atan2(mouseY - player.y, mouseX - player.x);
                 const hitbox = {
-                    x: player.x + player.width,
-                    y: player.y,
-                    width: 28,
-                    height: player.height
+                    x: player.x + Math.cos(angle) * 20,
+                    y: player.y + Math.sin(angle) * 20,
+                    width: 30,
+                    height: 30
                 };
 
                 let hit = false;
                 for (let i = enemies.length - 1; i >= 0; i--) {
                     if (rectCollide(hitbox, enemies[i])) {
-                        enemies[i].health -= 35;
+                        enemies[i].health -= 40;
                         hit = true;
                         if (enemies[i].health <= 0) {
                             enemies.splice(i, 1);
-                            score += 100;
+                            score += 150;
                         }
                     }
                 }
 
-                if (hit) score += 10;
-                punchCooldown = 25;
+                if (hit) score += 20;
+                punchCooldown = 30;
             }
 
             function update(dt) {
                 shootCooldown = Math.max(0, shootCooldown - dt);
                 punchCooldown = Math.max(0, punchCooldown - dt);
+                muzzleFlash = Math.max(0, muzzleFlash - dt);
 
                 // movement
                 let moveX = 0;
                 let moveY = 0;
 
-                if (keys['w'] || keys['arrowup']) moveY -= player.speed;
-                if (keys['s'] || keys['arrowdown']) moveY += player.speed;
-                if (keys['a'] || keys['arrowleft']) moveX -= player.speed;
-                if (keys['d'] || keys['arrowright']) moveX += player.speed;
+                if (keys['w'] || keys['arrowup']) moveY = -player.speed;
+                if (keys['s'] || keys['arrowdown']) moveY = player.speed;
+                if (keys['a'] || keys['arrowleft']) moveX = -player.speed;
+                if (keys['d'] || keys['arrowright']) moveX = player.speed;
 
                 player.x += moveX * dt;
                 player.y += moveY * dt;
 
+                // gravity
+                if (!player.isJumping) {
+                    player.vy += 0.4;
+                }
+                player.y += player.vy * dt;
+                player.isJumping = true;
+
                 // keep player in bounds
                 player.x = Math.max(0, Math.min(canvas.width - player.width, player.x));
-                player.y = Math.max(0, Math.min(canvas.height - player.height, player.y));
 
                 // obstacle collisions
                 for (const obs of obstacles) {
                     if (rectCollide(player, obs)) {
-                        if (moveY > 0) player.y = obs.y - player.height;
-                        if (moveY < 0) player.y = obs.y + obs.height;
-                        if (moveX > 0) player.x = obs.x - player.width;
-                        if (moveX < 0) player.x = obs.x + obs.width;
+                        if (player.vy > 0) {
+                            player.y = obs.y - player.height;
+                            player.vy = 0;
+                            player.isJumping = false;
+                        } else if (player.vy < 0) {
+                            player.y = obs.y + obs.height;
+                            player.vy = 0;
+                        } else if (moveX > 0) {
+                            player.x = obs.x - player.width;
+                        } else if (moveX < 0) {
+                            player.x = obs.x + obs.width;
+                        }
                     }
+                }
+
+                if (player.y > canvas.height) {
+                    player.y = 50;
+                    player.health -= 20;
+                    player.vy = 0;
                 }
 
                 // bullets
                 for (let i = bullets.length - 1; i >= 0; i--) {
                     bullets[i].x += bullets[i].vx * dt;
+                    bullets[i].y += bullets[i].vy * dt;
 
-                    if (bullets[i].x > canvas.width) {
+                    if (bullets[i].x < 0 || bullets[i].x > canvas.width || 
+                        bullets[i].y < 0 || bullets[i].y > canvas.height) {
                         bullets.splice(i, 1);
                         continue;
                     }
 
                     for (let j = enemies.length - 1; j >= 0; j--) {
                         if (rectCollide(bullets[i], enemies[j])) {
-                            enemies[j].health -= 25;
+                            enemies[j].health -= bullets[i].damage;
                             bullets.splice(i, 1);
                             if (enemies[j].health <= 0) {
                                 enemies.splice(j, 1);
@@ -290,13 +386,39 @@
                     }
                 }
 
-                // enemy AI
+                // enemy AI with gravity
                 for (const enemy of enemies) {
-                    const towardPlayer = player.x < enemy.x ? -1 : 1;
-                    enemy.x += towardPlayer * enemy.speed * dt;
+                    const dx = player.x - enemy.x;
+                    const towardPlayer = dx < 0 ? -1 : 1;
+                    
+                    if (Math.abs(dx) < 300) {
+                        enemy.vx = towardPlayer * enemy.speed;
+                    } else {
+                        enemy.vx = 0;
+                    }
+
+                    enemy.x += enemy.vx * dt;
+                    enemy.vy += 0.3;
+                    enemy.y += enemy.vy * dt;
+
+                    let onGround = false;
+                    for (const obs of obstacles) {
+                        if (rectCollide(enemy, obs)) {
+                            if (enemy.vy > 0) {
+                                enemy.y = obs.y - enemy.height;
+                                enemy.vy = 0;
+                                onGround = true;
+                                
+                                // jump toward player
+                                if (Math.random() < 0.05) {
+                                    enemy.vy = -6;
+                                }
+                            }
+                        }
+                    }
 
                     if (rectCollide(player, enemy)) {
-                        player.health -= 0.1 * dt * 30;
+                        player.health -= 0.15 * dt * 30;
                     }
                 }
 
@@ -312,58 +434,105 @@
                 // finish check
                 if (rectCollide(player, finish)) {
                     stage += 1;
-                    score += 300;
+                    score += 500;
                     spawnEnemies();
                     player.x = 30;
-                    player.y = 100;
+                    player.y = 400;
+                    player.vy = 0;
                 }
 
                 document.getElementById('health').textContent = Math.ceil(player.health);
+                document.getElementById('ammo').textContent = player.ammo;
                 document.getElementById('stage').textContent = stage;
                 document.getElementById('enemies').textContent = enemies.length;
             }
 
             function draw() {
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
-                ctx.fillStyle = '#151515';
+                ctx.fillStyle = '#0a0a0a';
                 ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-                // draw sky blocks / platforms
+                // draw platforms
                 for (const obs of obstacles) {
                     ctx.fillStyle = obs.color;
                     ctx.fillRect(obs.x, obs.y, obs.width, obs.height);
+                    ctx.strokeStyle = '#999';
+                    ctx.lineWidth = 1;
+                    ctx.strokeRect(obs.x, obs.y, obs.width, obs.height);
                 }
 
                 // finish flag
                 ctx.fillStyle = finish.color;
                 ctx.fillRect(finish.x, finish.y, finish.width, finish.height);
+                ctx.fillStyle = '#000';
+                ctx.font = 'bold 14px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText('END', finish.x + finish.width / 2, finish.y + finish.height / 2 + 5);
 
-                // player
-                ctx.fillStyle = player.color;
-                ctx.fillRect(player.x, player.y, player.width, player.height);
-
-                // bullets
+                // draw bullets
                 for (const bullet of bullets) {
                     ctx.fillStyle = bullet.color;
                     ctx.fillRect(bullet.x, bullet.y, bullet.width, bullet.height);
                 }
 
-                // enemies
+                // draw enemies as stick figures
                 for (const enemy of enemies) {
-                    ctx.fillStyle = enemy.color;
-                    ctx.fillRect(enemy.x, enemy.y, enemy.width, enemy.height);
+                    const angle = Math.atan2(player.y - enemy.y, player.x - enemy.x);
+                    drawStickFigure(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2, enemy.color, angle);
 
+                    // enemy health bar
                     ctx.fillStyle = '#ff0000';
-                    ctx.fillRect(enemy.x, enemy.y - 8, enemy.width, 4);
+                    ctx.fillRect(enemy.x - 2, enemy.y - 10, enemy.width + 4, 4);
                     ctx.fillStyle = '#00ff00';
-                    ctx.fillRect(enemy.x, enemy.y - 8, (enemy.health / enemy.maxHealth) * enemy.width, 4);
+                    ctx.fillRect(enemy.x - 2, enemy.y - 10, ((enemy.health / enemy.maxHealth) * (enemy.width + 4)), 4);
                 }
 
-                // health bar
+                // draw player as stick figure
+                const playerAngle = Math.atan2(mouseY - player.y, mouseX - player.x);
+                drawStickFigure(player.x + player.width / 2, player.y + player.height / 2, player.color, playerAngle);
+
+                // draw gun
+                const gunLength = 20;
+                ctx.strokeStyle = '#444';
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.moveTo(player.x + player.width / 2, player.y + player.height / 2);
+                ctx.lineTo(
+                    player.x + player.width / 2 + Math.cos(playerAngle) * gunLength,
+                    player.y + player.height / 2 + Math.sin(playerAngle) * gunLength
+                );
+                ctx.stroke();
+
+                // muzzle flash
+                if (muzzleFlash > 0) {
+                    ctx.fillStyle = `rgba(255, 200, 0, ${muzzleFlash / 3})`;
+                    const flashX = player.x + player.width / 2 + Math.cos(playerAngle) * gunLength;
+                    const flashY = player.y + player.height / 2 + Math.sin(playerAngle) * gunLength;
+                    ctx.beginPath();
+                    ctx.arc(flashX, flashY, 8, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+
+                // crosshair
+                ctx.strokeStyle = '#00ff00';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(mouseX - 15, mouseY);
+                ctx.lineTo(mouseX + 15, mouseY);
+                ctx.moveTo(mouseX, mouseY - 15);
+                ctx.lineTo(mouseX, mouseY + 15);
+                ctx.stroke();
+
+                // crosshair circle
+                ctx.beginPath();
+                ctx.arc(mouseX, mouseY, 8, 0, Math.PI * 2);
+                ctx.stroke();
+
+                // player health bar
                 ctx.fillStyle = '#ff0000';
-                ctx.fillRect(10, 20, 100, 12);
+                ctx.fillRect(10, 20, 120, 12);
                 ctx.fillStyle = '#00ff00';
-                ctx.fillRect(10, 20, (player.health / player.maxHealth) * 100, 12);
+                ctx.fillRect(10, 20, (player.health / player.maxHealth) * 120, 12);
             }
 
             function gameLoop(ts) {
@@ -377,10 +546,23 @@
 
             window.addEventListener('keydown', (e) => {
                 keys[e.key.toLowerCase()] = true;
+                if (e.key.toLowerCase() === 'r') reload();
+                if (e.key.toLowerCase() === ' ') {
+                    if (!player.isJumping) {
+                        player.vy = -9;
+                        player.isJumping = true;
+                    }
+                }
             });
 
             window.addEventListener('keyup', (e) => {
                 keys[e.key.toLowerCase()] = false;
+            });
+
+            canvas.addEventListener('mousemove', (e) => {
+                const rect = canvas.getBoundingClientRect();
+                mouseX = ((e.clientX - rect.left) / rect.width) * canvas.width;
+                mouseY = ((e.clientY - rect.top) / rect.height) * canvas.height;
             });
 
             canvas.addEventListener('mousedown', (e) => {
