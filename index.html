@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Simple FPS Game</title>
+    <style>
+        body {
+            background-color: #333;
+            color: #fff;
+            font-family: sans-serif;
+        }
+
+        #lobby {
+            width: 300px;
+            margin: 20px auto;
+            padding: 20px;
+            border: 1px solid #fff;
+            text-align: center;
+        }
+
+        #game-container {
+            width: 600px;
+            height: 400px;
+            margin: 20px auto;
+            border: 1px solid #fff;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="lobby">
+        <h1>Lobby</h1>
+        <button onclick="selectMap('arena')">Arena</button><br>
+        <button onclick="selectMap('playground')">Playground</button><br>
+        <button onclick="selectMap('docks')">Docks</button><br>
+        <p id="selected-map">Selected Map: None</p>
+        <button onclick="startGame()">Start Game</button>
+    </div>
+
+    <div id="game-container">
+        <canvas id="gameCanvas" width="600" height="400"></canvas>
+    </div>
+
+    <script>
+        let selectedMap = null;
+
+        function selectMap(mapName) {
+            selectedMap = mapName;
+            document.getElementById('selected-map').textContent = `Selected Map: ${mapName}`;
+        }
+
+        function startGame() {
+            if (selectedMap) {
+                // Create a canvas context
+                const canvas = document.getElementById('gameCanvas');
+                const ctx = canvas.getContext('2d');
+
+                // Clear the canvas
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                // Set background color
+                ctx.fillStyle = '#222';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                // Display selected map on canvas
+                ctx.font = '30px Arial';
+                ctx.fillStyle = 'white';
+                ctx.textAlign = 'center';
+                ctx.fillText(`Map: ${selectedMap}`, canvas.width / 2, canvas.height / 2);
+            } else {
+                alert('Please select a map first.');
+            }
+        }
+    </script>
+
+</body>
+</html>
