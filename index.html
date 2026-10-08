@@ -4,29 +4,62 @@
     <title>Simple FPS Game</title>
     <style>
         body {
-            background-color: #333;
-            color: #fff;
-            font-family: sans-serif;
+            margin: 0;
+            background: #111;
+            color: white;
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
         }
 
         #lobby {
-            width: 300px;
+            width: 320px;
             margin: 20px auto;
             padding: 20px;
-            border: 1px solid #fff;
+            border: 2px solid #fff;
             text-align: center;
+            background: rgba(255,255,255,0.05);
+            border-radius: 10px;
+        }
+
+        button {
+            width: 180px;
+            margin: 6px;
+            padding: 10px;
+            border: none;
+            border-radius: 8px;
+            background: #555;
+            color: white;
+            font-size: 16px;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background: #777;
         }
 
         #game-container {
             width: 600px;
             height: 400px;
             margin: 20px auto;
-            border: 1px solid #fff;
+            border: 2px solid #fff;
+            background: #222;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            background: #222;
         }
     </style>
 </head>
 <body>
-
     <div id="lobby">
         <h1>Lobby</h1>
         <button onclick="selectMap('arena')">Arena</button><br>
@@ -49,28 +82,228 @@
         }
 
         function startGame() {
-            if (selectedMap) {
-                // Create a canvas context
-                const canvas = document.getElementById('gameCanvas');
-                const ctx = canvas.getContext('2d');
+            if (!selectedMap) {
+                alert('Please select a map first.');
+                return;
+            }
 
-                // Clear the canvas
+            const canvas = document.getElementById('gameCanvas');
+            const ctx = canvas.getContext('2d');
+
+            const mapSettings = {
+                arena: { bg: '#1a1a1a', accent: '#ffcc00' },
+                playground: { bg: '#2d3b2d', accent: '#66ff66' },
+                docks: { bg: '#1d2b38', accent: '#66b3ff' }
+            };
+
+            const settings = mapSettings[selectedMap];
+            const player = {
+                x: canvas.width / 2,
+                y: canvas.height / 2,
+                radius: 12,
+                speed: 3,
+                color: '#ffffff'
+            };
+
+            const bullets = [];
+            const enemies = [];
+            let score = 0;
+            let timeLeft = 30;
+            let lastTime = 0;
+            let animationId = null;
+
+            if (animationId) cancelAnimationFrame(animationId);
+
+            let keys = {};
+            let mouse = { x: canvas.width / 2, y: canvas.height / 2, down: false };
+
+            function resetGame() {
+                bullets.length = 0;
+                enemies.length = 0;
+                score = 0;
+                timeLeft = 30;
+                player.x = canvas.width / 2;
+                player.y = canvas.height / 2;
+                for (let i = 0; i < 8; i++) {
+                    enemies.push({
+                        x: Math.random() * (canvas.width - 30) + 15,
+                        y: Math.random() * (canvas.height - 30) + 15,
+                        radius: 12,
+                        speed: 1 + Math.random() * 0.8
+                    });
+                }
+            }
+
+            function shoot() {
+                const angle = Math.atan2(mouse.y - player.y, mouse.x - player.x);
+                bullets.push({
+                    x: player.x,
+                    y: player.y,
+                    vx: Math.cos(angle) * 6,
+                    vy: Math.sin(angle) * 6,
+                    radius: 4
+                });
+            }
+
+            function spawnEnemy() {
+                enemies.push({
+                    x: Math.random() * (canvas.width - 30) + 15,
+                    y: Math.random() * (canvas.height - 30) + 15,
+                    radius: 12,
+                    speed: 1 + Math.random() * 1.2
+                });
+            }
+
+            function update(dt) {
+                if (keys['w']) player.y -= player.speed * dt;
+                if (keys['s']) player.y += player.speed * dt;
+                if (keys['a']) player.x -= player.speed * dt;
+                if (keys['d']) player.x += player.speed * dt;
+
+                player.x = Math.max(10, Math.min(canvas.width - 10, player.x));
+                player.y = Math.max(10, Math.min(canvas.height - 10, player.y));
+
+                for (let i = bullets.length - 1; i >= 0; i--) {
+                    bullets[i].x += bullets[i].vx * dt;
+                    bullets[i].y += bullets[i].vy * dt;
+
+                    if (
+                        bullets[i].x < 0 || bullets[i].x > canvas.width ||
+                        bullets[i].y < 0 || bullets[i].y > canvas.height
+                    ) {
+                        bullets.splice(i, 1);
+                        continue;
+                    }
+
+                    for (let j = enemies.length - 1; j >= 0; j--) {
+                        const dx = bullets[i].x - enemies[j].x;
+                        const dy = bullets[i].y - enemies[j].y;
+                        const dist = Math.hypot(dx, dy);
+
+                        if (dist < bullets[i].radius + enemies[j].radius) {
+                            bullets.splice(i, 1);
+                            enemies.splice(j, 1);
+                            score += 10;
+                            if (Math.random() < 0.35) spawnEnemy();
+                            break;
+                        }
+                    }
+                }
+
+                for (let i = enemies.length - 1; i >= 0; i--) {
+                    const dx = player.x - enemies[i].x;
+                    const dy = player.y - enemies[i].y;
+                    const dist = Math.hypot(dx, dy);
+
+                    if (dist > 0) {
+                        const speed = enemies[i].speed * dt;
+                        enemies[i].x += (dx / dist) * speed;
+                        enemies[i].y += (dy / dist) * speed;
+                    }
+
+                    if (dist < player.radius + enemies[i].radius) {
+                        alert('Game Over! Final Score: ' + score);
+                        resetGame();
+                        return;
+                    }
+                }
+
+                if (enemies.length < 6 && Math.random() < 0.02) {
+                    spawnEnemy();
+                }
+            }
+
+            function draw() {
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-                // Set background color
-                ctx.fillStyle = '#222';
+                ctx.fillStyle = settings.bg;
                 ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-                // Display selected map on canvas
-                ctx.font = '30px Arial';
-                ctx.fillStyle = 'white';
-                ctx.textAlign = 'center';
-                ctx.fillText(`Map: ${selectedMap}`, canvas.width / 2, canvas.height / 2);
-            } else {
-                alert('Please select a map first.');
+                ctx.fillStyle = settings.accent;
+                ctx.fillRect(50, 50, 120, 60);
+                ctx.fillRect(420, 250, 120, 60);
+
+                ctx.strokeStyle = '#fff';
+                ctx.beginPath();
+                ctx.moveTo(mouse.x - 8, mouse.y);
+                ctx.lineTo(mouse.x + 8, mouse.y);
+                ctx.moveTo(mouse.x, mouse.y - 8);
+                ctx.lineTo(mouse.x, mouse.y + 8);
+                ctx.stroke();
+
+                ctx.fillStyle = player.color;
+                ctx.beginPath();
+                ctx.arc(player.x, player.y, player.radius, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.strokeStyle = '#fff';
+                ctx.beginPath();
+                ctx.moveTo(player.x, player.y);
+                ctx.lineTo(mouse.x, mouse.y);
+                ctx.stroke();
+
+                ctx.fillStyle = '#ffdd88';
+                for (const bullet of bullets) {
+                    ctx.beginPath();
+                    ctx.arc(bullet.x, bullet.y, bullet.radius, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+
+                ctx.fillStyle = '#ff5555';
+                for (const enemy of enemies) {
+                    ctx.beginPath();
+                    ctx.arc(enemy.x, enemy.y, enemy.radius, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+
+                ctx.fillStyle = '#fff';
+                ctx.font = '20px Arial';
+                ctx.fillText(`Map: ${selectedMap}`, 20, 30);
+                ctx.fillText(`Score: ${score}`, 20, 55);
+                ctx.fillText(`Time: ${Math.ceil(timeLeft)}`, 20, 80);
             }
+
+            function gameLoop(timestamp) {
+                const delta = (timestamp - (lastTime || timestamp)) / 16.666;
+                lastTime = timestamp;
+                timeLeft -= 0.016 * delta;
+
+                if (timeLeft <= 0) {
+                    alert('Time Up! Final Score: ' + score);
+                    resetGame();
+                    lastTime = timestamp;
+                } else {
+                    update(delta);
+                    draw();
+                    animationId = requestAnimationFrame(gameLoop);
+                }
+            }
+
+            canvas.addEventListener('mousemove', (e) => {
+                const rect = canvas.getBoundingClientRect();
+                mouse.x = ((e.clientX - rect.left) / rect.width) * canvas.width;
+                mouse.y = ((e.clientY - rect.top) / rect.height) * canvas.height;
+            });
+
+            canvas.addEventListener('mousedown', () => {
+                mouse.down = true;
+                shoot();
+            });
+
+            canvas.addEventListener('mouseup', () => {
+                mouse.down = false;
+            });
+
+            document.addEventListener('keydown', (e) => {
+                keys[e.key.toLowerCase()] = true;
+            });
+
+            document.addEventListener('keyup', (e) => {
+                keys[e.key.toLowerCase()] = false;
+            });
+
+            resetGame();
+            animationId = requestAnimationFrame(gameLoop);
         }
     </script>
-
 </body>
 </html>
